@@ -3,15 +3,23 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime
 import pytz
+# --- 新增自動刷新庫 ---
+from streamlit_autorefresh import st_autorefresh
 
 # 1. 網頁基本設定
 st.set_page_config(page_title="Gemini 價值投資核心監控", layout="wide")
-st.title("📊 2026 價值投資核心資產實時監控 (帶當日最高價記錄)")
+st.title("📊 2026 價值投資核心資產實時監控 (每60秒自動刷新)")
+
+# --- 核心新增：設定每 60 秒 (60000 毫秒) 自動重新運行整個腳本 ---
+# limit=None 代表無限次循環刷新，key 用來鎖定定時器狀態
+refresh_count = st_autorefresh(interval=60000, limit=None, key="ticker_auto_refresh")
 
 # 2. 精確修復香港時間 (HKT)
 hk_tz = pytz.timezone('Asia/Hong_Kong')
 hk_time = datetime.now(hk_tz)
-st.write(f"系統時間 (HKT): {hk_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+# 在介面上提示用戶目前自動刷新的狀態
+st.write(f"系統時間 (HKT): **{hk_time.strftime('%Y-%m-%d %H:%M:%S')}** | 🔄 已自動刷新次數: `{refresh_count}`")
 
 # 3. 定義您的核心自選股名單
 WATCHLIST = {
@@ -23,8 +31,7 @@ WATCHLIST = {
     "耀才證券 (1428)": "1428.HK"
 }
 
-# 4. 初始化應用的「短期記憶體」
-# 如果記憶體中還沒有最高價的記錄字典，就幫它建立一個
+# 4. 初始化應用的「短期記憶體」以追蹤最高價
 if "highest_prices" not in st.session_state:
     st.session_state.highest_prices = {}
 
@@ -40,15 +47,13 @@ def get_stock_data(ticker_symbol):
             price_change = latest_price - open_price
             pct_change = (price_change / open_price) * 100
             
-            # --- 核心新增：動態更新及儲存當日最高價 ---
-            # 如果是第一次抓取該股票，或者當前抓到的價格比記憶體中的歷史最高價還要高
+            # 動態更新及儲存當日最高價
             current_saved_high = st.session_state.highest_prices.get(ticker_symbol, 0.0)
             if latest_price > current_saved_high:
                 st.session_state.highest_prices[ticker_symbol] = latest_price
                 display_high = latest_price
             else:
                 display_high = current_saved_high
-            # ----------------------------------------
             
             # 獲取價值投資基礎指標
             info = ticker.info
@@ -62,7 +67,7 @@ def get_stock_data(ticker_symbol):
                 
             return {
                 "最新股價": round(latest_price, 2),
-                "今日記錄最高價": round(display_high, 2), # 新增此輸出欄位
+                "今日記錄最高價": round(display_high, 2),
                 "今日漲跌": round(price_change, 2),
                 "漲跌幅": f"{round(pct_change, 2)}%",
                 "市盈率 (P/E)": round(pe_ratio, 2) if isinstance(pe_ratio, (int, float)) else pe_ratio,
@@ -75,7 +80,7 @@ def get_stock_data(ticker_symbol):
 # 6. 控制版面組件
 col_btn1, col_btn2 = st.columns([1, 8])
 with col_btn1:
-    if st.button("🔄 刷新數據"):
+    if st.button("🔄 手動刷新"):
         st.rerun()
 with col_btn2:
     if st.button("🗑️ 重設最高價記錄"):
@@ -85,7 +90,7 @@ with col_btn2:
 st.markdown("---")
 
 # 7. 渲染核心持倉看板
-st.subheader("核心持倉實時看板 (每點擊刷新將自動對比最高價)")
+st.subheader("核心持倉實時看板 (每 60 秒後台自動更新)")
 cols = st.columns(3)
 
 for idx, (name, ticker) in enumerate(WATCHLIST.items()):
@@ -98,7 +103,6 @@ for idx, (name, ticker) in enumerate(WATCHLIST.items()):
                 value=f"${data['最新股價']}", 
                 delta=delta_str
             )
-            # 在下方精美地展示今日錄得的最高股價與基本面數據
             st.markdown(f"🔥 **今日監控最高點:** `${data['今日記錄最高價']}`")
             st.caption(f"**P/E:** {data['市盈率 (P/E)']} | **P/B:** {data['市淨率 (P/B)']} | **股息率:** {data['股息率']}")
             st.markdown("---")
@@ -114,4 +118,4 @@ if custom_ticker:
             st.success(f"成功獲取 {custom_ticker} 的最新數據！")
             st.table(pd.DataFrame([custom_data]))
         else:
-            st.error("未能讀取該代碼，請檢查輸入是否正確（港股記得加 .HK）。")
+            st.error("未能讀取該代碼，請檢查輸入是否正確。")
