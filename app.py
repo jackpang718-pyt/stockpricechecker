@@ -2,11 +2,20 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
+import pytz  # <--- Make sure this library is imported
 
 # 1. 網頁基本設定
 st.set_page_config(page_title="Gemini 價值投資核心監控", layout="wide")
 st.title("📊 2026 價值投資核心資產實時監控")
-st.write(f"系統時間 (HKT): {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+# --- TIMEZONE FIX START ---
+# Force the app to calculate the time based on Hong Kong's zone, regardless of where the server is hosted
+hk_tz = pytz.timezone('Asia/Hong_Kong')
+hk_time = datetime.now(hk_tz)
+st.write(f"系統時間 (HKT): {hk_time.strftime('%Y-%m-%d %H:%M:%S')}")
+# --- TIMEZONE FIX END ---
+
+# 2. 定義您的核心自選股名單... (The rest of your code remains exactly the same!)
 
 # 2. 定義您的核心自選股名單 (美股直接輸入代碼，港股用 0700.HK 格式)
 WATCHLIST = {
