@@ -18,9 +18,9 @@ st_autorefresh(interval=60000, limit=None, key="retirement_refresh")
 # 香港時間設定
 hk_tz = pytz.timezone('Asia/Hong_Kong')
 hk_time = datetime.now(hk_tz)
-st.write(f"系統時間 (HKT): **{hk_time.strftime('%Y-%m-%d %H:%M:%S')}** | 🔄 全自動同步中...")
+st.write(f"系統時間 (HKT): **{hk_time.strftime('%Y-%m-%d %H:%M:%S')}** | 🔄 港美雙市場全自動雙向對接中...")
 
-# 2. 強化版 Google Sheet 網址格式轉換器
+# 2. Google Sheet 網址格式轉換器
 def get_csv_download_url(url):
     try:
         if "/d/" in url:
@@ -39,14 +39,25 @@ def load_portfolio(url):
         return pd.DataFrame()
     try:
         df = pd.read_csv(csv_url)
-        # 統一將欄位名稱清理並轉為小寫
         df.columns = df.columns.str.strip().str.lower()
         return df
     except Exception as e:
-        st.error("❌ 無法連線至您的 Google Sheet，請檢查共用權限是否已設定為「任何人均可檢視」。")
+        st.error("❌ 無法連線至您的 Google Sheet，請檢查共用權限。")
         return pd.DataFrame()
 
-# 4. 獲取實時數據
+# 4. 核心新增：自動將 Google 格式 (HKG:0700) 翻譯為 Yahoo 格式 (0700.HK)
+def convert_ticker_for_yahoo(sheet_ticker):
+    ticker = str(sheet_ticker).strip().upper()
+    # 如果用戶在 Sheet 裡輸入了 HKG:0700 格式
+    if ticker.startswith("HKG:"):
+        code = ticker.split("HKG:")[1].strip()
+        return f"{code}.HK"
+    # 如果用戶直接輸入 0700
+    elif ticker.isdigit() and len(ticker) == 4:
+        return f"{ticker}.HK"
+    return ticker
+
+# 5. 獲取實時數據
 def fetch_stock_data(ticker):
     try:
         t = yf.Ticker(ticker)
@@ -57,7 +68,7 @@ def fetch_stock_data(ticker):
         return None, 0.0
     return None, 0.0
 
-# 控制清除緩存的強制刷新按鈕
+# 手動強制刷新按鈕
 col_refresh, _ = st.columns([1, 5])
 with col_refresh:
     if st.button("⚡ 立即強行同步雲端"):
@@ -68,27 +79,28 @@ with col_refresh:
 df_sheet = load_portfolio(GOOGLE_SHEET_URL)
 
 if not df_sheet.empty:
-    # 檢查必填欄位
     required_cols = ['stock code', 'stock name', 'share', 'cost']
     if not all(col in df_sheet.columns for col in required_cols):
-        st.error(f"❌ 您的 Google Sheet 頂部欄位名稱不符！目前偵測到的是: {list(df_sheet.columns)}")
-        st.info("💡 **請修正 Google Sheet 第一行**，精確填入這四個小寫標題：`stock code`、`stock name`、`share`、`cost`")
+        st.error(f"❌ 欄位名稱不符！目前偵測到的是: {list(df_sheet.columns)}")
     else:
         total_value_hkd = 0.0
         total_dividend_hkd = 0.0
         portfolio_details = []
         USD_HKD = 7.8
         
-        with st.spinner("🚀 正在為您同步全球交易所最新數據..."):
+        with st.spinner("🚀 正在無縫對接 Google Finance 與 Yahoo Finance 數據..."):
             for _, row in df_sheet.iterrows():
-                ticker = str(row['stock code']).strip()
-                # 直接讀取 Google Sheet 裡的中文或英文股票名稱
+                sheet_ticker = str(row['stock code']).strip()
                 stock_name = str(row['stock name']).strip()
                 shares = float(row['share'])
                 cost = float(row['cost'])
                 
-                is_us = not ticker.endswith(".HK")
-                price, div_y = fetch_stock_data(ticker)
+                # --- 幕後黑科技：將 HKG:0700 全自動轉為 0700.HK ---
+                yahoo_ticker = convert_ticker_for_yahoo(sheet_ticker)
+                is_us = not yahoo_ticker.endswith(".HK")
+                # ------------------------------------------------
+                
+                price, div_y = fetch_stock_data(yahoo_ticker)
                 
                 if price:
                     value_hkd = (price * shares * USD_HKD) if is_us else (price * shares)
@@ -99,7 +111,8 @@ if not df_sheet.empty:
                     
                     portfolio_details.append({
                         "股票名稱": stock_name,
-                        "股票代碼": ticker,
+                        "股票代碼 (Sheet)": sheet_ticker,
+                        "系統識別碼 (Yahoo)": yahoo_ticker, # 顯示出來方便您對照檢查
                         "持股數量": shares,
                         "買入成本": f"${round(cost,2)} {'USD' if is_us else 'HKD'}",
                         "目前市價": f"${round(price,2)} {'USD' if is_us else 'HKD'}",
@@ -108,7 +121,7 @@ if not df_sheet.empty:
                         "預估股息率": f"{round(div_y * 100, 2)}%"
                     })
         
-        # 5. 渲染退休大盤指標
+        # 6. 渲染大盤指標
         TARGET_CAPITAL = 2000000.0
         TARGET_MONTHLY = 10000.0
         
