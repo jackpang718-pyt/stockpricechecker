@@ -18,7 +18,7 @@ st_autorefresh(interval=60000, limit=None, key="retirement_refresh")
 # 香港時間設定
 hk_tz = pytz.timezone('Asia/Hong_Kong')
 hk_time = datetime.now(hk_tz)
-st.write(f"系統時間 (HKT): **{hk_time.strftime('%Y-%m-%d %H:%M:%S')}** | 🛡️ 數據智能防錯校正版運行中...")
+st.write(f"系統時間 (HKT): **{hk_time.strftime('%Y-%m-%d %H:%M:%S')}** | 🛡️ 股息率底層公式重構版運行中...")
 
 # 2. Google Sheet 網址格式轉換器
 def get_csv_download_url(url):
@@ -55,22 +55,30 @@ def convert_ticker_for_yahoo(sheet_ticker):
         return f"{ticker}.HK"
     return ticker
 
-# 5. 獲取實時數據 (內置港股股息率防錯校正)
+# 5. 獲取實時數據 (徹底重構股息率計算邏輯)
 def fetch_stock_data(ticker):
     try:
         t = yf.Ticker(ticker)
         hist = t.history(period='1d')
         if not hist.empty:
             latest_price = hist['Close'].iloc[-1]
-            raw_div_yield = t.info.get('dividendYield', 0.0) or 0.0
+            info = t.info
             
-            # 🛡️ 核心黑科技校正：修復 Yahoo Finance 港股股息率放大 100 倍或匯率錯配的 Bug
-            # 正常股票的股息率很少會超過 20% (0.20)
-            if ticker.endswith(".HK") and raw_div_yield > 0.20:
-                # 如果是像 123% (1.23) 或 2.64% 被放大成 264% (2.64) 的情況，直接除以 100
-                raw_div_yield = raw_div_yield / 100.0
+            # 🛡️ 終極解決方案：不再使用不靠譜的 dividendYield
+            # 直接抓取「每股實際派息現金金額」 (例如蘋果 1 年派 $1 USD，騰訊派 $3.4 HKD)
+            actual_dividend_rate = info.get('dividendRate', 0.0) or 0.0
+            
+            # 如果抓不到實際派息金額，試著用 trailingAnnualDividend替代
+            if actual_dividend_rate == 0.0:
+                actual_dividend_rate = info.get('trailingAnnualDividendRate', 0.0) or 0.0
                 
-            return latest_price, raw_div_yield
+            # 💡 用最純粹的數學公式手動計算出精確的小數點股息率：【年派息金額 / 目前股價】
+            if latest_price > 0:
+                calculated_div_yield = actual_dividend_rate / latest_price
+            else:
+                calculated_div_yield = 0.0
+                
+            return latest_price, calculated_div_yield
     except:
         return None, 0.0
     return None, 0.0
@@ -95,7 +103,7 @@ if not df_sheet.empty:
         portfolio_details = []
         USD_HKD = 7.8
         
-        with st.spinner("🚀 正在為您精算即時賺蝕與正確股息..."):
+        with st.spinner("🚀 正在使用物理公式精算全球資產真實股息率..."):
             for _, row in df_sheet.iterrows():
                 sheet_ticker = str(row['stock code']).strip()
                 stock_name = str(row['stock name']).strip()
@@ -112,6 +120,7 @@ if not df_sheet.empty:
                     total_cost_hkd = (cost * shares * USD_HKD) if is_us else (cost * shares)
                     
                     total_value_hkd += value_hkd
+                    # div_y 目前是純粹的小數（如 0.025），乘以港幣總市值，算出精確的港幣年股息收入
                     total_dividend_hkd += (value_hkd * div_y)
                     
                     gain_loss_price_hkd = value_hkd - total_cost_hkd
@@ -129,6 +138,7 @@ if not df_sheet.empty:
                         "持倉總值 (HKD)": round(value_hkd, 2),
                         "帳面回報價 (HKD)": f"{sign_price}{gain_loss_price_hkd:,.2f}",
                         "帳面回報率": f"{sign_pct}{gain_pct:.2f}%",
+                        # 將精確的小數乘以 100 展現為標準百分比
                         "預估股息率": f"{round(div_y * 100, 2)}%",
                         "_is_positive": gain_loss_price_hkd > 0,
                         "_is_negative": gain_loss_price_hkd < 0
