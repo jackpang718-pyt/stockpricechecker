@@ -18,7 +18,7 @@ st_autorefresh(interval=60000, limit=None, key="retirement_refresh")
 # 香港時間設定
 hk_tz = pytz.timezone('Asia/Hong_Kong')
 hk_time = datetime.now(hk_tz)
-st.write(f"系統時間 (HKT): **{hk_time.strftime('%Y-%m-%d %H:%M:%S')}** | 🔄 架構相容性修正版運行中...")
+st.write(f"系統時間 (HKT): **{hk_time.strftime('%Y-%m-%d %H:%M:%S')}** | 🛡️ 數據智能防錯校正版運行中...")
 
 # 2. Google Sheet 網址格式轉換器
 def get_csv_download_url(url):
@@ -55,13 +55,22 @@ def convert_ticker_for_yahoo(sheet_ticker):
         return f"{ticker}.HK"
     return ticker
 
-# 5. 獲取實時數據
+# 5. 獲取實時數據 (內置港股股息率防錯校正)
 def fetch_stock_data(ticker):
     try:
         t = yf.Ticker(ticker)
         hist = t.history(period='1d')
         if not hist.empty:
-            return hist['Close'].iloc[-1], t.info.get('dividendYield', 0.0) or 0.0
+            latest_price = hist['Close'].iloc[-1]
+            raw_div_yield = t.info.get('dividendYield', 0.0) or 0.0
+            
+            # 🛡️ 核心黑科技校正：修復 Yahoo Finance 港股股息率放大 100 倍或匯率錯配的 Bug
+            # 正常股票的股息率很少會超過 20% (0.20)
+            if ticker.endswith(".HK") and raw_div_yield > 0.20:
+                # 如果是像 123% (1.23) 或 2.64% 被放大成 264% (2.64) 的情況，直接除以 100
+                raw_div_yield = raw_div_yield / 100.0
+                
+            return latest_price, raw_div_yield
     except:
         return None, 0.0
     return None, 0.0
@@ -79,14 +88,14 @@ df_sheet = load_portfolio(GOOGLE_SHEET_URL)
 if not df_sheet.empty:
     required_cols = ['stock code', 'stock name', 'share', 'cost']
     if not all(col in df_sheet.columns for col in required_cols):
-        st.error(f"❌ 欄位名稱不符！目前偵測到的是: {list(df_sheet.columns)}")
+        st.error(f"❌ 欄位名稱不符！")
     else:
         total_value_hkd = 0.0
         total_dividend_hkd = 0.0
         portfolio_details = []
         USD_HKD = 7.8
         
-        with st.spinner("🚀 正在為您精算即時賺蝕與帳面回報..."):
+        with st.spinner("🚀 正在為您精算即時賺蝕與正確股息..."):
             for _, row in df_sheet.iterrows():
                 sheet_ticker = str(row['stock code']).strip()
                 stock_name = str(row['stock name']).strip()
@@ -121,7 +130,7 @@ if not df_sheet.empty:
                         "帳面回報價 (HKD)": f"{sign_price}{gain_loss_price_hkd:,.2f}",
                         "帳面回報率": f"{sign_pct}{gain_pct:.2f}%",
                         "預估股息率": f"{round(div_y * 100, 2)}%",
-                        "_is_positive": gain_loss_price_hkd > 0, # 用最安全的布林值標記賺蝕
+                        "_is_positive": gain_loss_price_hkd > 0,
                         "_is_negative": gain_loss_price_hkd < 0
                     })
         
@@ -146,33 +155,26 @@ if not df_sheet.empty:
         st.markdown("---")
         st.subheader("📋 雲端聯動 · 真實資產明細表")
         
-        # 7. 優化後的精確著色邏輯
+        # 7. 渲染著色
         df_raw = pd.DataFrame(portfolio_details)
-        
-        # 💡 先定義要顯示的明細欄位名單
         cols_to_show = ["股票名稱", "股票代碼", "持股數量", "買入成本", "目前市價", "持倉總值 (HKD)", "帳面回報價 (HKD)", "帳面回報率", "預估股息率"]
-        
-        # 💡 重點修復：先過濾出要顯示的欄位，再交給 Styler
         df_display = df_raw[cols_to_show].copy()
         
         def apply_colors(row):
             styles = [''] * len(row)
-            # 從原始未經過濾的 df_raw 中根據行號找回布林值標記
             is_pos = df_raw.loc[row.name, "_is_positive"]
             is_neg = df_raw.loc[row.name, "_is_negative"]
             
             if is_pos:
-                color_css = 'color: #00AD45; font-weight: bold;'  # 獲利綠色
+                color_css = 'color: #00AD45; font-weight: bold;'
             elif is_neg:
-                color_css = 'color: #FF3B30; font-weight: bold;'  # 虧損紅色
+                color_css = 'color: #FF3B30; font-weight: bold;'
             else:
                 color_css = ''
                 
-            # 精確塗裝
             styles[row.index.get_loc("帳面回報價 (HKD)")] = color_css
             styles[row.index.get_loc("帳面回報率")] = color_css
             return styles
 
-        # 著色並直接渲染（不再傳入任何會衝突的 columns 參數）
         styled_df = df_display.style.apply(apply_colors, axis=1)
         st.dataframe(styled_df, use_container_width=True)
