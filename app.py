@@ -22,11 +22,11 @@ st.markdown("---")
 # 2. 【核心設定】請在下方輸入您實際持有的股票數量 (此處為模擬數字，可自由修改)
 # 您可以隨時在代碼中修改這些數字，以反映您真實的持倉
 MY_PORTFOLIO = {
-    "TSLA": {"shares": 30, "cost": 210.0, "type": "US"},
-    "AAPL": {"shares": 20, "cost": 190.0, "type": "US"},
-    "NVDA": {"shares": 50, "cost": 100.0, "type": "US"},
-    "0700.HK": {"shares": 500, "cost": 460.0, "type": "HK"},
-    "9988.HK": {"shares": 800, "cost": 75.0, "type": "HK"}
+    "TSLA": {"shares": 40, "cost": 215.0, "type": "US"},
+    "AAPL": {"shares": 10, "cost": 212.0, "type": "US"},
+    "NVDA": {"shares": 50, "cost": 105.0, "type": "US"},
+    "0700.HK": {"shares": 300, "cost": 463.0, "type": "HK"},
+    "9988.HK": {"shares": 1000, "cost": 105.0, "type": "HK"}
 }
 
 # 退休目標設定
