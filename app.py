@@ -18,7 +18,7 @@ st_autorefresh(interval=60000, limit=None, key="retirement_refresh")
 # 香港時間設定
 hk_tz = pytz.timezone('Asia/Hong_Kong')
 hk_time = datetime.now(hk_tz)
-st.write(f"系統時間 (HKT): **{hk_time.strftime('%Y-%m-%d %H:%M:%S')}** | 🔄 相容性修正版同步中...")
+st.write(f"系統時間 (HKT): **{hk_time.strftime('%Y-%m-%d %H:%M:%S')}** | 🔄 終極穩定增強版運行中...")
 
 # 2. Google Sheet 網址格式轉換器
 def get_csv_download_url(url):
@@ -108,6 +108,10 @@ if not df_sheet.empty:
                     gain_loss_price_hkd = value_hkd - total_cost_hkd
                     gain_pct = ((price - cost) / cost) * 100 if cost > 0 else 0.0
                     
+                    # 💡 安全做法：在這裡提前把數值格式化好，避免交給 Styler 處理
+                    sign_price = "+" if gain_loss_price_hkd > 0 else ""
+                    sign_pct = "+" if gain_pct > 0 else ""
+                    
                     portfolio_details.append({
                         "股票名稱": stock_name,
                         "股票代碼": sheet_ticker,
@@ -115,8 +119,12 @@ if not df_sheet.empty:
                         "買入成本": f"${round(cost,2)} {'USD' if is_us else 'HKD'}",
                         "目前市價": f"${round(price,2)} {'USD' if is_us else 'HKD'}",
                         "持倉總值 (HKD)": round(value_hkd, 2),
-                        "帳面回報價 (HKD)": round(gain_loss_price_hkd, 2),
-                        "帳面回報率": round(gain_pct, 2),
+                        # 保存為純數字供著色引擎判斷
+                        "_raw_gain_price": gain_loss_price_hkd,
+                        "_raw_gain_pct": gain_pct,
+                        # 這是最終顯示在網頁上的精美字串（包含千分位逗號和正負號）
+                        "帳面回報價 (HKD)": f"{sign_price}{gain_loss_price_hkd:,.2f}",
+                        "帳面回報率": f"{sign_pct}{gain_pct:.2f}%",
                         "預估股息率": f"{round(div_y * 100, 2)}%"
                     })
         
@@ -141,23 +149,39 @@ if not df_sheet.empty:
         st.markdown("---")
         st.subheader("📋 雲端聯動 · 真實資產明細表")
         
-        # 7. 修正後的視覺著色邏輯：將 applymap 改為 map 以相容新版 Pandas
+        # 7. 全新設計的「安全雙軌著色法」
         df_display = pd.DataFrame(portfolio_details)
         
-        def color_gain_loss(val):
+        def apply_row_styles(row):
+            # 建立一個與行欄位數量相同的樣式列表
+            styles = [''] * len(row)
+            
+            # 獲取我們藏在後台的隱藏原始數字
+            raw_price = row['_raw_gain_price']
+            
+            # 判斷賺蝕顏色
+            if raw_price > 0:
+                color_css = 'color: #00AD45; font-weight: bold;'  # 獲利綠色
+            elif raw_price < 0:
+                color_css = 'color: #FF3B30; font-weight: bold;'  # 虧損紅色
+            else:
+                color_css = ''
+                
+            # 將顏色精確染在「帳面回報價」與「帳面回報率」這兩格上
             try:
-                numeric_val = float(val)
-                if numeric_val > 0:
-                    return 'color: #00AD45; font-weight: bold;'  # 獲利綠色
-                elif numeric_val < 0:
-                    return 'color: #FF3B30; font-weight: bold;'  # 虧損紅色
+                idx_price = row.index.get_loc("帳面回報價 (HKD)")
+                idx_pct = row.index.get_loc("帳面回報率")
+                styles[idx_price] = color_css
+                styles[idx_pct] = color_css
             except:
                 pass
-            return ''
+                
+            return styles
 
-        # 使用新版符合標準的 .map() 進行局部著色，並精準格式化輸出
-        styled_df = df_display.style.map(color_gain_loss, subset=["帳面回報價 (HKD)", "帳面回報率"])\
-                                    .format({"帳面回報率": "{:+.2f}%", 
-                                             "帳面回報價 (HKD)": "{:+\,.2f}"})
+        # 剔除掉隱藏的原始計算欄位，不讓它們顯示在最終網頁畫面上
+        cols_to_show = ["股票名稱", "股票代碼", "持股數量", "買入成本", "目前市價", "持倉總值 (HKD)", "帳面回報價 (HKD)", "帳面回報率", "預估股息率"]
         
-        st.dataframe(styled_df, use_container_width=True)
+        # 執行安全著色並渲染
+        styled_df = df_display.style.apply(apply_row_styles, axis=1)
+        
+        st.dataframe(styled_df, columns=cols_to_show, use_container_width=True)
