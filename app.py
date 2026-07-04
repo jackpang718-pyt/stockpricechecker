@@ -10,7 +10,7 @@ st.set_page_config(page_title="65歲200萬退休衝刺系統", layout="wide")
 st.title("🎯 65歲退休資產與每月$1萬被動收入衝刺儀表板 (Google Sheet 聯動版)")
 
 # --- 💡 請在下方貼上您的 Google Sheet 網址 ---
-GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/您的試算表ID/edit?usp=sharing"
+GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/11vTIsQ8OIGLAqrVcp4nPk7ONRpEL6plSGq3F73IYLMQ/edit?usp=sharing"
 
 # 自動刷新：每 60 秒刷新一次
 st_autorefresh(interval=60000, limit=None, key="retirement_refresh")
