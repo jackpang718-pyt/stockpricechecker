@@ -3,119 +3,107 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime
 import pytz
-# --- 新增自動刷新庫 ---
 from streamlit_autorefresh import st_autorefresh
 
 # 1. 網頁基本設定
-st.set_page_config(page_title="Gemini 價值投資核心監控", layout="wide")
-st.title("📊 2026 價值投資核心資產實時監控 (每60秒自動刷新)")
+st.set_page_config(page_title="65歲200萬退休衝刺系統", layout="wide")
+st.title("🎯 65歲退休資產與每月$1萬被動收入衝刺儀表板")
 
-# --- 核心新增：設定每 60 秒 (60000 毫秒) 自動重新運行整個腳本 ---
-# limit=None 代表無限次循環刷新，key 用來鎖定定時器狀態
-refresh_count = st_autorefresh(interval=60000, limit=None, key="ticker_auto_refresh")
+# 自動刷新：每 60 秒 (60000 毫秒) 刷新一次
+refresh_count = st_autorefresh(interval=60000, limit=None, key="retirement_refresh")
 
-# 2. 精確修復香港時間 (HKT)
+# 香港時間設定
 hk_tz = pytz.timezone('Asia/Hong_Kong')
 hk_time = datetime.now(hk_tz)
-
-# 在介面上提示用戶目前自動刷新的狀態
-st.write(f"系統時間 (HKT): **{hk_time.strftime('%Y-%m-%d %H:%M:%S')}** | 🔄 已自動刷新次數: `{refresh_count}`")
-
-# 3. 定義您的核心自選股名單
-WATCHLIST = {
-    "Tesla (TSLA)": "TSLA",
-    "Apple (AAPL)": "AAPL",
-    "Coupang (CPNG)": "CPNG",
-    "騰訊控股 (0700)": "0700.HK",
-    "阿里巴巴 (9988)": "9988.HK",
-    "耀才證券 (1428)": "1428.HK"
-}
-
-# 4. 初始化應用的「短期記憶體」以追蹤最高價
-if "highest_prices" not in st.session_state:
-    st.session_state.highest_prices = {}
-
-# 5. 獲取實時數據並記錄盤中最高價的函數
-def get_stock_data(ticker_symbol):
-    try:
-        ticker = yf.Ticker(ticker_symbol)
-        todays_data = ticker.history(period='1d')
-        
-        if not todays_data.empty:
-            latest_price = todays_data['Close'].iloc[-1]
-            open_price = todays_data['Open'].iloc[-1]
-            price_change = latest_price - open_price
-            pct_change = (price_change / open_price) * 100
-            
-            # 動態更新及儲存當日最高價
-            current_saved_high = st.session_state.highest_prices.get(ticker_symbol, 0.0)
-            if latest_price > current_saved_high:
-                st.session_state.highest_prices[ticker_symbol] = latest_price
-                display_high = latest_price
-            else:
-                display_high = current_saved_high
-            
-            # 獲取價值投資基礎指標
-            info = ticker.info
-            pe_ratio = info.get('trailingPE', 'N/A')
-            pb_ratio = info.get('priceToBook', 'N/A')
-            div_yield = info.get('dividendYield', 0)
-            if div_yield and div_yield != 'N/A':
-                div_yield = f"{round(div_yield * 100, 2)}%"
-            else:
-                div_yield = "無派息/暫無數據"
-                
-            return {
-                "最新股價": round(latest_price, 2),
-                "今日記錄最高價": round(display_high, 2),
-                "今日漲跌": round(price_change, 2),
-                "漲跌幅": f"{round(pct_change, 2)}%",
-                "市盈率 (P/E)": round(pe_ratio, 2) if isinstance(pe_ratio, (int, float)) else pe_ratio,
-                "市淨率 (P/B)": round(pb_ratio, 2) if isinstance(pb_ratio, (int, float)) else pb_ratio,
-                "股息率": div_yield
-            }
-    except Exception as e:
-        return None
-
-# 6. 控制版面組件
-col_btn1, col_btn2 = st.columns([1, 8])
-with col_btn1:
-    if st.button("🔄 手動刷新"):
-        st.rerun()
-with col_btn2:
-    if st.button("🗑️ 重設最高價記錄"):
-        st.session_state.highest_prices = {}
-        st.rerun()
+st.write(f"系統時間 (HKT): **{hk_time.strftime('%Y-%m-%d %H:%M:%S')}** | 🔄 已自動更新: `{refresh_count}` 次")
 
 st.markdown("---")
 
-# 7. 渲染核心持倉看板
-st.subheader("核心持倉實時看板 (每 60 秒後台自動更新)")
-cols = st.columns(3)
+# 2. 【核心設定】請在下方輸入您實際持有的股票數量 (此處為模擬數字，可自由修改)
+# 您可以隨時在代碼中修改這些數字，以反映您真實的持倉
+MY_PORTFOLIO = {
+    "TSLA": {"shares": 30, "cost": 210.0, "type": "US"},
+    "AAPL": {"shares": 20, "cost": 190.0, "type": "US"},
+    "NVDA": {"shares": 50, "cost": 100.0, "type": "US"},
+    "0700.HK": {"shares": 500, "cost": 460.0, "type": "HK"},
+    "9988.HK": {"shares": 800, "cost": 75.0, "type": "HK"}
+}
 
-for idx, (name, ticker) in enumerate(WATCHLIST.items()):
-    data = get_stock_data(ticker)
-    if data:
-        with cols[idx % 3]:
-            delta_str = f"{data['今日漲跌']} ({data['漲跌幅']})"
-            st.metric(
-                label=name, 
-                value=f"${data['最新股價']}", 
-                delta=delta_str
-            )
-            st.markdown(f"🔥 **今日監控最高點:** `${data['今日記錄最高價']}`")
-            st.caption(f"**P/E:** {data['市盈率 (P/E)']} | **P/B:** {data['市淨率 (P/B)']} | **股息率:** {data['股息率']}")
-            st.markdown("---")
+# 退休目標設定
+TARGET_CAPITAL = 2000000.0  # 200萬港元
+TARGET_MONTHLY_INCOME = 10000.0  # 每月1萬被動收入
 
-# 8. 自定義查詢板塊
-st.subheader("🔍 查詢其他股票基本面")
-custom_ticker = st.text_input("輸入股票代碼 (例如 NVDA 或 0941.HK):", "").strip()
+# 3. 獲取實時價格函數
+def fetch_stock_price(ticker_symbol):
+    try:
+        ticker = yf.Ticker(ticker_symbol)
+        todays_data = ticker.history(period='1d')
+        if not todays_data.empty:
+            latest_price = todays_data['Close'].iloc[-1]
+            info = ticker.info
+            div_yield = info.get('dividendYield', 0.0) if info.get('dividendYield') else 0.0
+            return latest_price, div_yield
+    except:
+        return None, 0.0
+    return None, 0.0
 
-if custom_ticker:
-    with st.spinner("正在檢索數據..."):
-        custom_data = get_stock_data(custom_ticker)
-        if custom_data:
-            st.success(f"成功獲取 {custom_ticker} 的最新數據！")
-            st.table(pd.DataFrame([custom_data]))
-        else:
-            st.error("未能讀取該代碼，請檢查輸入是否正確。")
+# 4. 計算資產總值與進度
+total_portfolio_value_hkd = 0.0
+estimated_annual_dividend_hkd = 0.0
+portfolio_details = []
+
+# 假設美金兌港元匯率為 7.8
+USD_HKD = 7.8
+
+with st.spinner("正在計算您的退休金實時進度..."):
+    for ticker, info in MY_PORTFOLIO.items():
+        price, div_y = fetch_stock_price(ticker)
+        if price:
+            # 轉換為港幣計算
+            if info["type"] == "US":
+                value_hkd = price * info["shares"] * USD_HKD
+                current_price_display = f"${round(price, 2)} USD"
+            else:
+                value_hkd = price * info["shares"]
+                current_price_display = f"${round(price, 2)} HKD"
+            
+            total_portfolio_value_hkd += value_hkd
+            estimated_annual_dividend_hkd += (value_hkd * div_y)
+            
+            portfolio_details.append({
+                "股票代碼": ticker,
+                "持股數量": info["shares"],
+                "目前市價": current_price_display,
+                "持倉總值 (HKD)": round(value_hkd, 2),
+                "預估股息率": f"{round(div_y * 100, 2)}%"
+            })
+
+# 5. 【看板主介面】三大退休指標
+st.subheader("🏁 65歲退休目標達成率")
+
+cap_progress = min(total_portfolio_value_hkd / TARGET_CAPITAL, 1.0)
+current_monthly_income = estimated_annual_dividend_hkd / 12.0
+income_progress = min(current_monthly_income / TARGET_MONTHLY_INCOME, 1.0)
+
+col1, col2 = st.columns(2)
+with col1:
+    st.metric(label="當前組合總市值 (HKD)", value=f"${round(total_portfolio_value_hkd, 2)}", delta=f"距離200萬目標還差: ${round(max(TARGET_CAPITAL - total_portfolio_value_hkd, 0.0), 2)}")
+    st.progress(cap_progress, text=f"本金進度: {round(cap_progress * 100, 2)}%")
+
+with col2:
+    st.metric(label="預估現狀每月被動收入 (HKD)", value=f"${round(current_monthly_income, 2)}", delta="退休目標: 每月 $10,000")
+    st.progress(income_progress, text=f"被動收入進度: {round(income_progress * 100, 2)}%")
+
+st.markdown("---")
+
+# 6. 持倉明細表格
+st.subheader("📋 目前資產清單明細")
+df = pd.DataFrame(portfolio_details)
+st.dataframe(df, use_container_width=True)
+
+# 7. 退休衝刺溫馨提示
+st.subheader("💡 退休策略看盤思維")
+if total_portfolio_value_hkd < TARGET_CAPITAL:
+    st.info(f"親愛的投資者，您目前距離 65 歲退休還有 8 年。目前現有資產已完成目標的 **{round(cap_progress * 100, 1)}%**。當前策略：無需恐慌騰訊等優質資產的短期回落，利用主動收入與股息繼續「低位吸納」，同時放手讓 Nvidia / Tesla 零成本部位奔跑，靜待複利奇蹟！")
+else:
+    st.success("🎉 太棒了！您的資產規模已跨越 200 萬港元門檻。接下來的任務是逐步在未來幾年將高波動的科技股，轉化為年化 6% 以上的穩定高息資產（如港股國企藍籌或高息 ETF），鎖定每月 1 萬元的現金流。")
