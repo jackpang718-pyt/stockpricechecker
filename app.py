@@ -18,7 +18,7 @@ st_autorefresh(interval=60000, limit=None, key="retirement_refresh")
 # 香港時間設定
 hk_tz = pytz.timezone('Asia/Hong_Kong')
 hk_time = datetime.now(hk_tz)
-st.write(f"系統時間 (HKT): **{hk_time.strftime('%Y-%m-%d %H:%M:%S')}** | 🔄 顏色視覺增強版同步中...")
+st.write(f"系統時間 (HKT): **{hk_time.strftime('%Y-%m-%d %H:%M:%S')}** | 🔄 相容性修正版同步中...")
 
 # 2. Google Sheet 網址格式轉換器
 def get_csv_download_url(url):
@@ -99,15 +99,12 @@ if not df_sheet.empty:
                 price, div_y = fetch_stock_data(yahoo_ticker)
                 
                 if price:
-                    # 計算港幣總市值
                     value_hkd = (price * shares * USD_HKD) if is_us else (price * shares)
-                    # 計算總成本 (港幣)
                     total_cost_hkd = (cost * shares * USD_HKD) if is_us else (cost * shares)
                     
                     total_value_hkd += value_hkd
                     total_dividend_hkd += (value_hkd * div_y)
                     
-                    # 核心新增：計算「帳面回報價（HKD）」與「帳面回報率」
                     gain_loss_price_hkd = value_hkd - total_cost_hkd
                     gain_pct = ((price - cost) / cost) * 100 if cost > 0 else 0.0
                     
@@ -144,24 +141,23 @@ if not df_sheet.empty:
         st.markdown("---")
         st.subheader("📋 雲端聯動 · 真實資產明細表")
         
-        # 7. 核心視覺功能：使用 Pandas Styler 為指定欄位著色
+        # 7. 修正後的視覺著色邏輯：將 applymap 改為 map 以相容新版 Pandas
         df_display = pd.DataFrame(portfolio_details)
         
         def color_gain_loss(val):
             try:
                 numeric_val = float(val)
                 if numeric_val > 0:
-                    return 'color: #00AD45; font-weight: bold;'  # 獲利顯示綠色
+                    return 'color: #00AD45; font-weight: bold;'  # 獲利綠色
                 elif numeric_val < 0:
-                    return 'color: #FF3B30; font-weight: bold;'  # 虧損顯示紅色
+                    return 'color: #FF3B30; font-weight: bold;'  # 虧損紅色
             except:
                 pass
             return ''
 
-        # 格式化顯示效果，為百分比加上 % 正負號字尾
-        styled_df = df_display.style.applymap(color_gain_loss, subset=["帳面回報價 (HKD)", "帳面回報率"])\
+        # 使用新版符合標準的 .map() 進行局部著色，並精準格式化輸出
+        styled_df = df_display.style.map(color_gain_loss, subset=["帳面回報價 (HKD)", "帳面回報率"])\
                                     .format({"帳面回報率": "{:+.2f}%", 
-                                             "帳面回報價 (HKD)": "{:+,2f}"})
+                                             "帳面回報價 (HKD)": "{:+\,.2f}"})
         
-        # 將帶有紅綠色彩的精美表格渲染至網頁上
         st.dataframe(styled_df, use_container_width=True)
